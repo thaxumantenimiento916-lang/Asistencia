@@ -545,14 +545,13 @@ async function cargarAsistencia() {
   const fecha = document.getElementById('fechaAsistencia').value;
   if (!fecha) return;
   const [semana, diaNombre] = semanaYDiaDe(fecha);
-  document.getElementById('semanaInput').value; // no-op, mantiene selección de horario aparte
 
-  const resHorario = await api('getHorario', { semana });
-  const resAsist = await api('getAsistencia', { fecha });
-  if (!resAsist.ok) return toast(resAsist.error || 'Error');
+  // Una sola llamada combinada (antes eran 2 llamadas separadas, una detrás de otra)
+  const res = await api('getDashboard', { semana, fecha });
+  if (!res.ok) return toast(res.error || 'Error');
 
-  asistenciaCache = resAsist.data;
-  const horarioDia = (resHorario.ok ? resHorario.data : []).filter(h => h.dia === diaNombre);
+  asistenciaCache = res.asistencia;
+  const horarioDia = (res.horario || []).filter(h => h.dia === diaNombre);
   renderAsistencia(horarioDia);
 }
 
