@@ -161,7 +161,6 @@ select.turno-select[data-turno="Descanso"] { background: #f6ad55; color: #7b341e
 .estado-ausente.active { background: var(--danger); color: #ffffff; }
 
 .hora-select { padding: 4px 6px; border-radius: 6px; border: 1px solid var(--border); font-size: .82rem; }
-.hora-custom { width: 78px; padding: 3px 5px; border-radius: 6px; border: 1px solid var(--border); font-size: .82rem; margin-top: 4px; }
 
 .form-box {
   background: var(--card);
@@ -562,8 +561,8 @@ function semanaYDiaDe(fechaStr) {
   return [fmtDate(lunes), diaNombre];
 }
 
-const OPCIONES_INGRESO = ['7:30', 'Otro'];
-const OPCIONES_SALIDA = ['17:00', '19:30', 'Otro'];
+const OPCIONES_INGRESO = ['7:30'];
+const OPCIONES_SALIDA = ['17:00', '19:30'];
 
 function renderAsistencia(horarioDia) {
   const tbody = document.querySelector('#tablaAsistencia tbody');
@@ -594,32 +593,15 @@ function renderAsistencia(horarioDia) {
   });
 }
 
-// Construye el <select> de hora + input oculto para "Otro"
+// Construye el <select> de hora, solo con las opciones fijas (sin hora libre)
 function renderHoraSelect(id, tipo, opciones, valorGuardado) {
-  const esPreset = opciones.includes(valorGuardado);
-  const seleccion = valorGuardado ? (esPreset ? valorGuardado : 'Otro') : opciones[0];
+  const seleccion = opciones.includes(valorGuardado) ? valorGuardado : opciones[0];
   const opts = opciones.map(o => `<option value="${o}" ${o === seleccion ? 'selected' : ''}>${o}</option>`).join('');
-  const mostrarCustom = seleccion === 'Otro';
-  const valorCustom = mostrarCustom && valorGuardado ? valorGuardado : '';
-  return `
-    <select class="hora-select" id="${tipo}-${id}" onchange="toggleCustom('${id}','${tipo}')">${opts}</select>
-    <br>
-    <input type="time" class="hora-custom ${mostrarCustom ? '' : 'hidden'}" id="${tipo}-custom-${id}" value="${valorCustom}">
-  `;
-}
-
-function toggleCustom(id, tipo) {
-  const select = document.getElementById(`${tipo}-${id}`);
-  const custom = document.getElementById(`${tipo}-custom-${id}`);
-  custom.classList.toggle('hidden', select.value !== 'Otro');
+  return `<select class="hora-select" id="${tipo}-${id}">${opts}</select>`;
 }
 
 function getHoraSeleccionada(id, tipo) {
   const select = document.getElementById(`${tipo}-${id}`);
-  if (select.value === 'Otro') {
-    const custom = document.getElementById(`${tipo}-custom-${id}`);
-    return custom.value || '';
-  }
   return select.value;
 }
 
