@@ -146,9 +146,19 @@ select.turno-select[data-turno="Descanso"] { background: #f6ad55; color: #7b341e
 .badge-ausente { background: #fed7d7; color: #822727; }
 .badge-sin-marcar { background: #edf2f7; color: var(--muted); }
 
-.mark-btns button { padding: 4px 8px; font-size: .78rem; margin-right: 4px; }
-.mark-presente { border-color: var(--success); color: var(--success); }
-.mark-ausente { border-color: var(--danger); color: var(--danger); }
+.estado-marcar { display: flex; gap: 6px; }
+.estado-btn {
+  padding: 6px 12px;
+  font-size: .82rem;
+  font-weight: 600;
+  border-radius: 999px;
+  background: transparent;
+  transition: background .15s, color .15s;
+}
+.estado-presente { border-color: var(--success); color: var(--success); }
+.estado-presente.active { background: var(--success); color: #ffffff; }
+.estado-ausente { border-color: var(--danger); color: var(--danger); }
+.estado-ausente.active { background: var(--danger); color: #ffffff; }
 
 .hora-select { padding: 4px 6px; border-radius: 6px; border: 1px solid var(--border); font-size: .82rem; }
 .hora-custom { width: 78px; padding: 3px 5px; border-radius: 6px; border: 1px solid var(--border); font-size: .82rem; margin-top: 4px; }
@@ -240,7 +250,7 @@ select.turno-select[data-turno="Descanso"] { background: #f6ad55; color: #7b341e
     <div class="table-wrap">
       <table id="tablaAsistencia">
         <thead>
-          <tr><th>Personal</th><th>Tipo</th><th>Turno asignado</th><th>Estado</th><th>Ingreso</th><th>Salida</th><th>Marcar</th></tr>
+          <tr><th>Personal</th><th>Tipo</th><th>Turno asignado</th><th>Ingreso</th><th>Salida</th><th>Estado</th></tr>
         </thead>
         <tbody></tbody>
       </table>
@@ -568,22 +578,17 @@ function renderAsistencia(horarioDia) {
     const marca = asistenciaCache.find(a => a.id === p.id);
     const estado = marca ? marca.estado : 'Sin marcar';
 
-    const badgeClass = {
-      'Presente': 'badge-presente', 'Ausente': 'badge-ausente', 'Sin marcar': 'badge-sin-marcar'
-    }[estado];
-
     const nombreSeguro = p.nombre.replace(/'/g, "\\'");
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${p.nombre}</td>
       <td>${p.tipo}</td>
       <td>${turno}</td>
-      <td><span class="badge ${badgeClass}">${estado}</span></td>
       <td>${renderHoraSelect(p.id, 'ingreso', OPCIONES_INGRESO, marca ? marca.horaIngreso : '')}</td>
       <td>${renderHoraSelect(p.id, 'salida', OPCIONES_SALIDA, marca ? marca.horaSalida : '')}</td>
-      <td class="mark-btns">
-        <button class="mark-presente" onclick="marcar('${p.id}','${nombreSeguro}','${turno}','Presente')">Presente</button>
-        <button class="mark-ausente" onclick="marcar('${p.id}','${nombreSeguro}','${turno}','Ausente')">Ausente</button>
+      <td class="estado-marcar">
+        <button class="estado-btn estado-presente ${estado === 'Presente' ? 'active' : ''}" onclick="marcar('${p.id}','${nombreSeguro}','${turno}','Presente')">Presente</button>
+        <button class="estado-btn estado-ausente ${estado === 'Ausente' ? 'active' : ''}" onclick="marcar('${p.id}','${nombreSeguro}','${turno}','Ausente')">Ausente</button>
       </td>
     `;
     tbody.appendChild(tr);
