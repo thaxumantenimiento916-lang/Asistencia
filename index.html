@@ -587,8 +587,8 @@ function renderAsistencia(horarioDia) {
       <td>${renderHoraSelect(p.id, 'ingreso', OPCIONES_INGRESO, marca ? marca.horaIngreso : '')}</td>
       <td>${renderHoraSelect(p.id, 'salida', OPCIONES_SALIDA, marca ? marca.horaSalida : '')}</td>
       <td class="estado-marcar">
-        <button class="estado-btn estado-presente ${estado === 'Presente' ? 'active' : ''}" onclick="marcar('${p.id}','${nombreSeguro}','${turno}','Presente')">Presente</button>
-        <button class="estado-btn estado-ausente ${estado === 'Ausente' ? 'active' : ''}" onclick="marcar('${p.id}','${nombreSeguro}','${turno}','Ausente')">Ausente</button>
+        <button id="btn-presente-${p.id}" class="estado-btn estado-presente ${estado === 'Presente' ? 'active' : ''}" onclick="marcar('${p.id}','${nombreSeguro}','${turno}','Presente')">Presente</button>
+        <button id="btn-ausente-${p.id}" class="estado-btn estado-ausente ${estado === 'Ausente' ? 'active' : ''}" onclick="marcar('${p.id}','${nombreSeguro}','${turno}','Ausente')">Ausente</button>
       </td>
     `;
     tbody.appendChild(tr);
@@ -631,12 +631,26 @@ async function marcar(id, nombre, turno, estado) {
   if (estado === 'Presente' && (!horaIngreso || !horaSalida)) {
     return toast('Completa la hora de ingreso y salida');
   }
+
+  const btnPresente = document.getElementById(`btn-presente-${id}`);
+  const btnAusente = document.getElementById(`btn-ausente-${id}`);
+  // Actualización optimista: pinta el botón de inmediato, sin esperar la respuesta
+  // del servidor (Apps Script suele tardar 1-3 segundos). Si la llamada falla, se revierte.
+  const estadoAnterior = asistenciaCache.find(a => a.id === id)?.estado;
+  if (btnPresente) btnPresente.classList.toggle('active', estado === 'Presente');
+  if (btnAusente) btnAusente.classList.toggle('active', estado === 'Ausente');
+
   const res = await api('marcarAsistencia', { fecha, id, nombre, turno, estado, horaIngreso, horaSalida });
   if (res.ok) {
     toast(`${nombre}: ${estado}`);
-    cargarAsistencia();
+    const idx = asistenciaCache.findIndex(a => a.id === id);
+    const registro = { fecha, id, nombre, turno, estado, horaIngreso, horaSalida, obs: '' };
+    if (idx >= 0) asistenciaCache[idx] = registro; else asistenciaCache.push(registro);
   } else {
-    toast(res.error || 'Error');
+    // Revertir si falló de verdad
+    toast(res.error || 'Error, no se guardó');
+    if (btnPresente) btnPresente.classList.toggle('active', estadoAnterior === 'Presente');
+    if (btnAusente) btnAusente.classList.toggle('active', estadoAnterior === 'Ausente');
   }
 }
 
