@@ -294,7 +294,15 @@ select.turno-select[data-turno="Descanso"] { background: #f6ad55; color: #7b341e
       <button onclick="exportarCSV()">⬇️ Exportar CSV</button>
       <button onclick="exportarPDF()">⬇️ Exportar PDF</button>
     </div>
-    <p class="muted">El reporte toma la asistencia marcada en la fecha seleccionada.</p>
+    <p class="muted">El reporte diario toma la asistencia marcada en la fecha seleccionada.</p>
+
+    <div class="toolbar">
+      <label>Semana del reporte (cualquier día de esa semana):
+        <input type="date" id="semanaReporte">
+      </label>
+      <button class="btn-primary" onclick="exportarPDFSemanal()">📄 Exportar reporte semanal (PDF)</button>
+    </div>
+    <p class="muted">El reporte semanal junta los 7 días (Lunes a Domingo) de esa semana, con un resumen de horas totales por persona.</p>
   </section>
 
   <div id="toast" class="toast hidden"></div>
@@ -315,16 +323,23 @@ let horarioCache = [];
 let asistenciaCache = [];
 let MINUTOS_ALMUERZO = 60; // valor por defecto; se actualiza desde Config al iniciar sesión
 
-function calcularHorasTrabajadas(horaIngreso, horaSalida) {
-  if (!horaIngreso || !horaSalida) return '';
+function calcularMinutosTrabajados(horaIngreso, horaSalida) {
+  if (!horaIngreso || !horaSalida) return null;
   const [h1, m1] = horaIngreso.split(':').map(Number);
   const [h2, m2] = horaSalida.split(':').map(Number);
-  if (isNaN(h1) || isNaN(h2)) return '';
+  if (isNaN(h1) || isNaN(h2)) return null;
   let minutos = (h2 * 60 + m2) - (h1 * 60 + m1) - MINUTOS_ALMUERZO;
-  if (minutos < 0) minutos += 24 * 60;
-  const horas = Math.floor(minutos / 60);
-  const mins = minutos % 60;
-  return `${horas}h ${mins}m`;
+  if (minutos < 0) minutos += 24 * 60; // turno cruza medianoche (ej. Noche)
+  return minutos;
+}
+function formatearMinutos(mins) {
+  if (mins === null || mins === undefined) return '';
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return `${h}h ${m}m`;
+}
+function calcularHorasTrabajadas(horaIngreso, horaSalida) {
+  return formatearMinutos(calcularMinutosTrabajados(horaIngreso, horaSalida));
 }
 
 // ============================================================
@@ -374,6 +389,7 @@ function mostrarApp() {
   const hoy = new Date();
   document.getElementById('fechaAsistencia').value = fmtDate(hoy);
   document.getElementById('fechaReporte').value = fmtDate(hoy);
+  document.getElementById('semanaReporte').value = fmtDate(hoy);
   document.getElementById('semanaInput').value = fmtDate(lunesDeEstaSemana(hoy));
   cargarPersonal();
   cargarHorario();
@@ -404,6 +420,10 @@ function showTab(tab) {
   document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
   document.getElementById('tab-' + tab).classList.remove('hidden');
   document.querySelector(`.tab-btn[data-tab="${tab}"]`).classList.add('active');
+  // Refresca datos al entrar a estas pestañas, para reflejar cambios recientes
+  // hechos en otra pestaña (ej. un cambio de turno guardado en Horario Semanal).
+  if (tab === 'asistencia') cargarAsistencia();
+  if (tab === 'horario') cargarHorario();
 }
 
 // ============================================================
@@ -561,8 +581,10 @@ function semanaYDiaDe(fechaStr) {
   return [fmtDate(lunes), diaNombre];
 }
 
-const OPCIONES_INGRESO = ['7:30'];
-const OPCIONES_SALIDA = ['17:00', '19:30'];
+const OPCIONES_INGRESO_DIA = ['7:30'];
+const OPCIONES_SALIDA_DIA = ['17:00'];
+const OPCIONES_INGRESO_NOCHE = ['19:30'];
+const OPCIONES_SALIDA_NOCHE = ['7:30'];
 
 function renderAsistencia(horarioDia) {
   const tbody = document.querySelector('#tablaAsistencia tbody');
@@ -575,6 +597,8 @@ function renderAsistencia(horarioDia) {
     if (turno === 'Descanso') return;
     const marca = asistenciaCache.find(a => a.id === p.id);
     const estado = marca ? marca.estado : 'Sin marcar';
+    const opcionesIngreso = turno === 'Noche' ? OPCIONES_INGRESO_NOCHE : OPCIONES_INGRESO_DIA;
+    const opcionesSalida = turno === 'Noche' ? OPCIONES_SALIDA_NOCHE : OPCIONES_SALIDA_DIA;
 
     const nombreSeguro = p.nombre.replace(/'/g, "\\'");
     const tr = document.createElement('tr');
@@ -582,8 +606,8 @@ function renderAsistencia(horarioDia) {
       <td>${p.nombre}</td>
       <td>${p.tipo}</td>
       <td>${turno}</td>
-      <td>${renderHoraSelect(p.id, 'ingreso', OPCIONES_INGRESO, marca ? marca.horaIngreso : '')}</td>
-      <td>${renderHoraSelect(p.id, 'salida', OPCIONES_SALIDA, marca ? marca.horaSalida : '')}</td>
+      <td>${renderHoraSelect(p.id, 'ingreso', opcionesIngreso, marca ? marca.horaIngreso : '')}</td>
+      <td>${renderHoraSelect(p.id, 'salida', opcionesSalida, marca ? marca.horaSalida : '')}</td>
       <td class="estado-marcar">
         <button id="btn-presente-${p.id}" class="estado-btn estado-presente ${estado === 'Presente' ? 'active' : ''}" onclick="marcar('${p.id}','${nombreSeguro}','${turno}','Presente')">Presente</button>
         <button id="btn-ausente-${p.id}" class="estado-btn estado-ausente ${estado === 'Ausente' ? 'active' : ''}" onclick="marcar('${p.id}','${nombreSeguro}','${turno}','Ausente')">Ausente</button>
@@ -673,6 +697,64 @@ async function exportarPDF() {
   });
 
   doc.save(`asistencia_${fecha}.pdf`);
+}
+
+async function exportarPDFSemanal() {
+  const fechaBase = document.getElementById('semanaReporte').value;
+  if (!fechaBase) return toast('Elige una fecha de esa semana');
+  const lunes = lunesDeEstaSemana(new Date(fechaBase + 'T00:00:00'));
+
+  // Genera las 7 fechas de la semana (Lunes a Domingo)
+  const fechas = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(lunes);
+    d.setDate(lunes.getDate() + i);
+    fechas.push(fmtDate(d));
+  }
+
+  toast('Generando reporte semanal...');
+  const resultados = await Promise.all(fechas.map(f => api('getAsistencia', { fecha: f })));
+
+  // Junta todas las filas de los 7 días, y acumula minutos por persona para el resumen
+  const filas = [];
+  const totalesPorPersona = new Map(); // nombre -> minutos acumulados
+
+  resultados.forEach((res, i) => {
+    if (!res.ok) return;
+    res.data.forEach(a => {
+      const minutos = calcularMinutosTrabajados(a.horaIngreso, a.horaSalida);
+      filas.push([fechas[i], a.nombre, a.turno, a.estado, a.horaIngreso || '-', a.horaSalida || '-', formatearMinutos(minutos) || '-']);
+      if (minutos !== null) {
+        totalesPorPersona.set(a.nombre, (totalesPorPersona.get(a.nombre) || 0) + minutos);
+      }
+    });
+  });
+
+  if (filas.length === 0) return toast('No hay datos de asistencia marcados en esa semana');
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  doc.setFontSize(14);
+  doc.text(`Reporte semanal de asistencia`, 14, 16);
+  doc.setFontSize(10);
+  doc.text(`Semana del ${fechas[0]} al ${fechas[6]}`, 14, 22);
+
+  doc.autoTable({
+    startY: 28,
+    head: [['Fecha', 'Nombre', 'Turno', 'Estado', 'Ingreso', 'Salida', 'Horas']],
+    body: filas,
+    styles: { fontSize: 8 }
+  });
+
+  // Tabla resumen: total de horas trabajadas por persona en la semana
+  const filasResumen = Array.from(totalesPorPersona.entries()).map(([nombre, mins]) => [nombre, formatearMinutos(mins)]);
+  doc.autoTable({
+    startY: doc.lastAutoTable.finalY + 10,
+    head: [['Resumen: horas totales de la semana por persona', '']],
+    body: filasResumen
+  });
+
+  doc.save(`asistencia_semana_${fechas[0]}.pdf`);
 }
 
 </script>
